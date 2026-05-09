@@ -42,7 +42,8 @@
 
         .image-wrapper img {
             width: 100%;
-            display: none; /* Ẩn cho đến khi load xong */
+            display: none;
+            /* Ẩn cho đến khi load xong */
             margin: 0;
         }
 
@@ -61,57 +62,70 @@
     </div>
     <div class="container">
         {% if page_links %}
-            {% for page_url in page_links %}
-            <div class="image-wrapper" data-page-url="{{ page_url }}">
-                <div class="loading-text">Đang tải...</div>
-                <img src="" alt="comic page" onload="this.style.display='block'; this.previousElementSibling.style.display='none'; this.parentElement.style.minHeight='auto';">
-            </div>
-            {% endfor %}
+        {% for page_url in page_links %}
+        <div class="image-wrapper" data-page-url="{{ page_url }}">
+            <div class="loading-text">Đang đợi tải...</div>
+            <img src="" alt="comic page">
+        </div>
+        {% endfor %}
         {% else %}
-            <h3 style="color: white; margin-top: 50px;">Không tìm thấy ảnh. Link có thể bị sai.</h3>
+        <h3 style="color: white; margin-top: 50px;">Không tìm thấy ảnh. Link có thể bị sai.</h3>
         {% endif %}
     </div>
 
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            const imageWrappers = document.querySelectorAll('.image-wrapper');
-            
-            // Dùng IntersectionObserver để lazy load khi cuộn tới gần ảnh
-            const observer = new IntersectionObserver((entries, observer) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        const wrapper = entry.target;
-                        const pageUrl = wrapper.getAttribute('data-page-url');
-                        const img = wrapper.querySelector('img');
-                        const loadingText = wrapper.querySelector('.loading-text');
-                        
-                        loadingText.style.display = 'block';
-                        
-                        // Gọi API lấy link ảnh gốc
-                        fetch(`/api/get_image?url=${encodeURIComponent(pageUrl)}`)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.image_url) {
-                                    img.src = data.image_url;
-                                } else {
-                                    loadingText.innerText = "Lỗi tải ảnh";
-                                }
-                            })
-                            .catch(err => {
-                                loadingText.innerText = "Lỗi kết nối";
-                            });
-                            
-                        // Ngừng theo dõi khung này sau khi bắt đầu tải
-                        observer.unobserve(wrapper);
-                    }
-                });
-            }, {
-                rootMargin: "0px 0px 2000px 0px" // Bắt đầu tải ảnh khi còn cách màn hình 2000px
-            });
-            
-            imageWrappers.forEach(wrapper => {
-                observer.observe(wrapper);
-            });
+        document.addEventListener("DOMContentLoaded", function () {
+            const imageWrappers = Array.from(document.querySelectorAll('.image-wrapper'));
+            const maxConcurrent = 10; // Tải 5 ảnh cùng lúc
+            let currentIndex = 0;
+
+            function loadNextImage() {
+                if (currentIndex >= imageWrappers.length) return;
+
+                const wrapper = imageWrappers[currentIndex];
+                currentIndex++; // Tăng chỉ số ngay lập tức để luồng khác không lấy trùng
+
+                const pageUrl = wrapper.getAttribute('data-page-url');
+                const img = wrapper.querySelector('img');
+                const loadingText = wrapper.querySelector('.loading-text');
+
+                loadingText.innerText = 'Đang tải...';
+                loadingText.style.display = 'block';
+
+                // Gọi API lấy link ảnh gốc
+                fetch(`/api/get_image?url=${encodeURIComponent(pageUrl)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.image_url) {
+                            // Gắn sự kiện khi ảnh tải xong hoặc lỗi
+                            img.onload = function () {
+                                this.style.display = 'block';
+                                this.previousElementSibling.style.display = 'none';
+                                this.parentElement.style.minHeight = 'auto';
+                                loadNextImage(); // Tiếp tục tải ảnh tiếp theo
+                            };
+                            img.onerror = function () {
+                                loadingText.innerText = "Lỗi hiển thị ảnh";
+                                loadNextImage();
+                            };
+
+                            // Bắt đầu tải ảnh
+                            img.src = data.image_url;
+                        } else {
+                            loadingText.innerText = "Lỗi tải ảnh";
+                            loadNextImage();
+                        }
+                    })
+                    .catch(err => {
+                        loadingText.innerText = "Lỗi kết nối";
+                        loadNextImage();
+                    });
+            }
+
+            // Bắt đầu tải các ảnh song song
+            for (let i = 0; i < Math.min(maxConcurrent, imageWrappers.length); i++) {
+                loadNextImage();
+            }
         });
     </script>
 </body>
