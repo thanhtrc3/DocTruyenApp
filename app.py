@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 import requests
 from bs4 import BeautifulSoup
 import concurrent.futures
@@ -56,7 +56,6 @@ def read_comic():
     if not url:
         return "Vui lòng nhập link!", 400
 
-    image_urls = []
     page_links = []
 
     try:
@@ -77,27 +76,23 @@ def read_comic():
         if not page_links:
             return "Không tìm thấy link ảnh nào trong trang web này. Bạn có chắc đây là link Gallery hợp lệ?", 400
 
-        # Tải các link ảnh cùng lúc để tăng tốc độ
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            # Lưu trữ future kèm theo index để giữ nguyên thứ tự ảnh
-            future_to_idx = {executor.submit(get_image_url, link): i for i, link in enumerate(page_links)}
-            
-            results = [None] * len(page_links)
-            for future in concurrent.futures.as_completed(future_to_idx):
-                idx = future_to_idx[future]
-                try:
-                    results[idx] = future.result()
-                except Exception:
-                    pass
-            
-            # Lọc bỏ các giá trị None
-            image_urls = [img_url for img_url in results if img_url is not None]
-
     except Exception as e:
         return f"Có lỗi xảy ra: {e}"
 
-    # Trả danh sách ảnh về giao diện đọc
-    return render_template('reader.html', images=image_urls)
+    # Trả danh sách page_links về giao diện đọc để lazy load
+    return render_template('reader.html', page_links=page_links)
+
+@app.route('/api/get_image', methods=['GET'])
+def api_get_image():
+    page_url = request.args.get('url')
+    if not page_url:
+        return jsonify({"error": "Missing url parameter"}), 400
+        
+    img_url = get_image_url(page_url)
+    if img_url:
+        return jsonify({"image_url": img_url})
+    else:
+        return jsonify({"error": "Cannot find image"}), 404
 
 if __name__ == '__main__':
     # Chạy server ở port 5000

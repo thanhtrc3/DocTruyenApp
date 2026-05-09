@@ -29,10 +29,28 @@
             margin: 0 auto;
         }
 
-        img {
+        .image-wrapper {
+            position: relative;
             width: 100%;
-            display: block;
+            min-height: 800px;
+            background: #222;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .image-wrapper img {
+            width: 100%;
+            display: none; /* Ẩn cho đến khi load xong */
             margin: 0;
+        }
+
+        .loading-text {
+            color: #888;
+            font-family: Arial;
+            font-size: 16px;
+            display: none;
         }
     </style>
 </head>
@@ -42,14 +60,60 @@
         <a href="/">← Nhập link khác</a>
     </div>
     <div class="container">
-        {% if images %}
-        {% for img_url in images %}
-        <img src="{{ img_url }}" loading="lazy" alt="comic page">
-        {% endfor %}
+        {% if page_links %}
+            {% for page_url in page_links %}
+            <div class="image-wrapper" data-page-url="{{ page_url }}">
+                <div class="loading-text">Đang tải...</div>
+                <img src="" alt="comic page" onload="this.style.display='block'; this.previousElementSibling.style.display='none'; this.parentElement.style.minHeight='auto';">
+            </div>
+            {% endfor %}
         {% else %}
-        <h3 style="color: white; margin-top: 50px;">Không tìm thấy ảnh. Link có thể bị sai.</h3>
+            <h3 style="color: white; margin-top: 50px;">Không tìm thấy ảnh. Link có thể bị sai.</h3>
         {% endif %}
     </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const imageWrappers = document.querySelectorAll('.image-wrapper');
+            
+            // Dùng IntersectionObserver để lazy load khi cuộn tới gần ảnh
+            const observer = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const wrapper = entry.target;
+                        const pageUrl = wrapper.getAttribute('data-page-url');
+                        const img = wrapper.querySelector('img');
+                        const loadingText = wrapper.querySelector('.loading-text');
+                        
+                        loadingText.style.display = 'block';
+                        
+                        // Gọi API lấy link ảnh gốc
+                        fetch(`/api/get_image?url=${encodeURIComponent(pageUrl)}`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.image_url) {
+                                    img.src = data.image_url;
+                                } else {
+                                    loadingText.innerText = "Lỗi tải ảnh";
+                                }
+                            })
+                            .catch(err => {
+                                loadingText.innerText = "Lỗi kết nối";
+                            });
+                            
+                        // Ngừng theo dõi khung này sau khi bắt đầu tải
+                        observer.unobserve(wrapper);
+                    }
+                });
+            }, {
+                rootMargin: "0px 0px 2000px 0px" // Bắt đầu tải ảnh khi còn cách màn hình 2000px
+            });
+            
+            imageWrappers.forEach(wrapper => {
+                observer.observe(wrapper);
+            });
+        });
+    </script>
 </body>
 
 </html>
