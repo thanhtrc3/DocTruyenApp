@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Chế Độ Đọc</title>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            text-align: center;
+        }
+
+        .nav {
+            padding: 15px;
+            background: #111;
+            text-align: left;
+        }
+
+        .nav a {
+            color: #00ffcc;
+            text-decoration: none;
+            font-size: 18px;
+            font-family: Arial;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        img {
+            width: 100%;
+            display: block;
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="nav">
+        <a href="/">← Nhập link khác</a>
+    </div>
+    <div class="container">
+        {% if images %}
+        {% for img_url in images %}
+        <img src="{{ img_url }}" loading="lazy" alt="comic page">
+        {% endfor %}
+        {% else %}
+        <h3 style="color: white; margin-top: 50px;">Không tìm thấy ảnh. Link có thể bị sai.</h3>
+        {% endif %}
+    </div>
+</body>
+
+</html>
