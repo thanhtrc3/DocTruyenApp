@@ -35,10 +35,30 @@ def get_all_gallery_pages(start_url):
         ptb = soup.find('table', class_='ptt')
         urls = [start_url]
         if ptb:
+            max_p = 0
+            base_url = None
             for a in ptb.find_all('a'):
                 href = a.get('href')
-                if href and 'e-hentai.org/g/' in href and href not in urls:
-                    urls.append(href)
+                if href and ('e-hentai.org/g/' in href or 'exhentai.org/g/' in href):
+                    if '?p=' in href:
+                        try:
+                            p_val = int(href.split('?p=')[1].split('&')[0])
+                            max_p = max(max_p, p_val)
+                            if not base_url:
+                                base_url = href.split('?p=')[0]
+                        except:
+                            pass
+                    else:
+                        if not base_url:
+                            base_url = href.split('?')[0]
+            
+            if base_url and max_p > 0:
+                urls = [f"{base_url}?p={i}" for i in range(max_p + 1)]
+            else:
+                for a in ptb.find_all('a'):
+                    href = a.get('href')
+                    if href and ('e-hentai.org/g/' in href or 'exhentai.org/g/' in href) and href not in urls:
+                        urls.append(href)
         
         # Xóa trùng lặp nhưng giữ nguyên thứ tự
         return list(dict.fromkeys(urls))
@@ -60,16 +80,26 @@ def read_comic():
 
     try:
         # Lấy danh sách các trang của gallery
-        gallery_pages = get_all_gallery_pages(url) if 'e-hentai.org' in url else [url]
+        gallery_pages = get_all_gallery_pages(url) if ('e-hentai.org' in url or 'exhentai.org' in url) else [url]
         
-        for g_url in gallery_pages:
-            response = requests.get(g_url, headers=headers)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Lấy tất cả link trỏ đến trang chứa ảnh
-            for a in soup.find_all('a'):
-                href = a.get('href')
-                if href and ('e-hentai.org/s/' in href or 'exhentai.org/s/' in href):
+        def fetch_page_links(g_url):
+            links = []
+            try:
+                response = requests.get(g_url, headers=headers, timeout=10)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                for a in soup.find_all('a'):
+                    href = a.get('href')
+                    if href and ('e-hentai.org/s/' in href or 'exhentai.org/s/' in href):
+                        if href not in links:
+                            links.append(href)
+            except Exception:
+                pass
+            return links
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            # executor.map preserves the order of gallery_pages
+            for links in executor.map(fetch_page_links, gallery_pages):
+                for href in links:
                     if href not in page_links:
                         page_links.append(href)
         
