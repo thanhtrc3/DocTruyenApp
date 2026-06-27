@@ -275,8 +275,8 @@ def read_comic():
         all_subpages = []
         all_direct_images = []
         
-        # Dùng luồng nhỏ (max_workers=5) tránh kích hoạt cơ chế chống DDoS của Cloudflare
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        # Dùng luồng nhỏ (max_workers=10) tránh kích hoạt cơ chế chống DDoS của Cloudflare
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
             results = list(executor.map(analyze_page_content, pages))
             for res in results:
                 if res["type"] == "subpages":
@@ -306,8 +306,8 @@ def read_comic():
                 initial_subs = all_subpages[:20]
                 remaining_subs = all_subpages[20:]
                 
-                # Hạn chế luồng đồng thời ở mức 5 để không bị Cloudflare quét cào dồn dập (Rate Limiting)
-                with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                # Hạn chế luồng đồng thời ở mức 20 để không bị Cloudflare quét cào dồn dập (Rate Limiting)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
                     resolved_20 = list(executor.map(fetch_single_image_from_subpage, initial_subs))
                     
                 for i, sub_u in enumerate(initial_subs):
