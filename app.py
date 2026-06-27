@@ -306,8 +306,8 @@ def read_comic():
                 initial_subs = all_subpages[:20]
                 remaining_subs = all_subpages[20:]
                 
-                # Hạn chế luồng đồng thời ở mức 20 để không bị Cloudflare quét cào dồn dập (Rate Limiting)
-                with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+                # Hạn chế luồng đồng thời ở mức 10 để không bị Cloudflare quét cào dồn dập (Rate Limiting)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                     resolved_20 = list(executor.map(fetch_single_image_from_subpage, initial_subs))
                     
                 for i, sub_u in enumerate(initial_subs):
