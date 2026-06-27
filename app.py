@@ -4,11 +4,23 @@ from bs4 import BeautifulSoup
 import concurrent.futures
 import urllib.parse
 import re
+import time
 
 app = Flask(__name__)
 
-# Sử dụng Session để tái sử dụng kết nối TCP/TLS (Keep-Alive), tăng tốc độ cào lên 5-10 lần
-session = requests.Session()
+# Tích hợp Cloudscraper (đã có sẵn trong requirements.txt) để vượt qua tường lửa Cloudflare Anti-Bot
+try:
+    import cloudscraper
+    session = cloudscraper.create_scraper(
+        browser={
+            'browser': 'chrome',
+            'platform': 'windows',
+            'desktop': True
+        }
+    )
+except ImportError:
+    session = requests.Session()
+
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -17,23 +29,29 @@ headers = {
 }
 session.headers.update(headers)
 
-def fetch_url(url):
-    """Hàm tải trang chung có xử lý timeout và header."""
-    try:
-        return session.get(url, timeout=10)
-    except Exception:
-        return None
+def fetch_url(url, retries=2):
+    """Hàm tải trang chung có thử lại (retry) khi gặp rate-limit hoặc chặn Cloudflare."""
+    for attempt in range(retries):
+        try:
+            resp = session.get(url, timeout=10)
+            if resp.status_code == 200:
+                return resp
+            elif resp.status_code in [403, 429, 503]:
+                time.sleep(0.5) # Nghỉ nhẹ nếu gặp tường lửa rate-limit
+        except Exception:
+            time.sleep(0.3)
+    return None
 
 def get_all_pages(start_url):
     """Kiểm tra trang web, tìm nút 'show all' nếu có, hoặc tìm các trang phân trang 1 2 3 ... n."""
     urls = [start_url]
     response = fetch_url(start_url)
-    if not response or response.status_code != 200:
+    if not response:
         return urls
         
     soup = BeautifulSoup(response.text, 'html.parser')
     
-    # 1. Kiểm tra ưu tiên: nút hoặc link "Show all" / "Xem tất cả" để mở rộng giới hạn trang
+    # 1. Kiểm tra ưu tiên: nút hoặc link "Show all" / "Xem tất cả"
     show_all_keywords = ['show all', 'view all', 'xem tất cả', 'load all', 'toàn bộ', 'read all']
     show_all_hrefs = ['show_all', 'view_all', 'all=1', 'paging=all', '?hc=1']
     
@@ -43,14 +61,14 @@ def get_all_pages(start_url):
         if any(kw in text for kw in show_all_keywords) or any(kw in href for kw in show_all_hrefs):
             full_url = urllib.parse.urljoin(start_url, a['href'])
             resp_all = fetch_url(full_url)
-            if resp_all and resp_all.status_code == 200:
+            if resp_all:
                 return [full_url]
                 
     parsed_start = urllib.parse.urlparse(start_url)
     base_netloc = parsed_start.netloc
     base_path = parsed_start.path.rstrip('/')
 
-    # 2. Kiểm tra phân trang theo parameter phổ biến (như ?p=1, ?page=2, ?offset=20)
+    # 2. Kiểm tra phân trang theo parameter phổ biến (?p=1, ?page=2)
     param_values = {}
     for a in soup.find_all('a', href=True):
         full_url = urllib.parse.urljoin(start_url, a['href'])
@@ -82,7 +100,7 @@ def get_all_pages(start_url):
                     generated.append(new_url)
             return list(dict.fromkeys(generated))
 
-    # 3. Nếu không dùng parameter, tìm các trang phân trang dạng số trang (1, 2, 3...)
+    # 3. Tìm phân trang dạng số trang (1, 2, 3...)
     page_numbers = {}
     for a in soup.find_all('a', href=True):
         full_url = urllib.parse.urljoin(start_url, a['href'])
@@ -133,12 +151,12 @@ def analyze_page_content(page_url):
     direct_images = []
     
     response = fetch_url(page_url)
-    if not response or response.status_code != 200:
+    if not response:
         return {"type": "images", "data": []}
         
     soup = BeautifulSoup(response.text, 'html.parser')
     
-    # 1. Tìm các ảnh trực tiếp
+    # 1. Tìm ảnh trực tiếp
     for img in soup.find_all('img'):
         src = (img.get('data-original') or img.get('data-src') or img.get('data-lazy-src') or img.get('data-url') or img.get('src'))
         if src:
@@ -149,7 +167,7 @@ def analyze_page_content(page_url):
             if full_img_url.startswith('http') and full_img_url not in direct_images:
                 direct_images.append(full_img_url)
 
-    # 2. Tìm các liên kết đến trang con xem ảnh (subpages)
+    # 2. Tìm link subpages
     parsed_base = urllib.parse.urlparse(page_url)
     base_netloc = parsed_base.netloc
     base_path = parsed_base.path.rstrip('/')
@@ -186,7 +204,7 @@ def analyze_page_content(page_url):
 def fetch_single_image_from_subpage(subpage_url):
     """Lấy link ảnh gốc từ một trang xem ảnh con."""
     response = fetch_url(subpage_url)
-    if not response or response.status_code != 200:
+    if not response:
         return None
         
     soup = BeautifulSoup(response.text, 'html.parser')
@@ -210,7 +228,7 @@ def fetch_single_image_from_subpage(subpage_url):
     return None
 
 def try_predict_all_images(subpages, resolved_first_few):
-    """THUẬT TOÁN ĐOÁN QUY LUẬT SIÊU TỐC: Nếu các ảnh tuân theo quy luật số thứ tự, sinh toàn bộ link trong 0.001 giây."""
+    """THUẬT TOÁN ĐOÁN QUY LUẬT SIÊU TỐC."""
     if len(resolved_first_few) < 2 or not all(resolved_first_few[:2]):
         return None
         
@@ -257,7 +275,8 @@ def read_comic():
         all_subpages = []
         all_direct_images = []
         
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        # Dùng luồng nhỏ (max_workers=5) tránh kích hoạt cơ chế chống DDoS của Cloudflare
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             results = list(executor.map(analyze_page_content, pages))
             for res in results:
                 if res["type"] == "subpages":
@@ -287,7 +306,8 @@ def read_comic():
                 initial_subs = all_subpages[:20]
                 remaining_subs = all_subpages[20:]
                 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+                # Hạn chế luồng đồng thời ở mức 5 để không bị Cloudflare quét cào dồn dập (Rate Limiting)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
                     resolved_20 = list(executor.map(fetch_single_image_from_subpage, initial_subs))
                     
                 for i, sub_u in enumerate(initial_subs):
