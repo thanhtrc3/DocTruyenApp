@@ -3,27 +3,83 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Đọc Truyện</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             background: #1a1a1a;
             color: white;
-            text-align: center;
-            padding-top: 100px;
-            font-family: Arial;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
         }
 
-        input {
-            width: 60%;
-            padding: 12px;
-            font-size: 16px;
+        .container {
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        h2 {
+            margin-bottom: 25px;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            background: white;
+            border-radius: 6px;
+            overflow: hidden;
             margin-bottom: 20px;
         }
 
-        button {
+        .input-group input {
+            flex: 1;
+            padding: 12px 15px;
+            font-size: 16px;
+            border: none;
+            outline: none;
+            color: #333;
+            min-width: 0;
+        }
+
+        .action-btn {
+            background: transparent;
+            border: none;
+            padding: 0 12px;
+            height: 43px;
+            cursor: pointer;
+            font-size: 15px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .action-btn:hover {
+            background: #f0f0f0;
+            color: #000;
+        }
+
+        .action-btn + .action-btn {
+            border-left: 1px solid #ddd;
+        }
+
+        button[type="submit"] {
             padding: 12px 25px;
             background: #00ffcc;
+            color: #000;
             border: none;
+            border-radius: 4px;
             font-size: 16px;
             font-weight: bold;
             cursor: pointer;
@@ -32,12 +88,42 @@
 </head>
 
 <body>
-    <h2>Dán link Gallery vào đây</h2>
-    <form action="/read" method="POST">
-        <input type="text" name="url" placeholder="Nhập link..." required>
-        <br>
-        <button type="submit">Đọc Ngay</button>
-    </form>
+    <div class="container">
+        <h2>Dán link truyện / ảnh vào đây</h2>
+        <form action="/read" method="POST">
+            <div class="input-group">
+                <input type="text" id="urlInput" name="url" placeholder="Nhập link..." required>
+                <button type="button" class="action-btn" id="clearBtn" title="Xóa link">✕</button>
+                <button type="button" class="action-btn" id="pasteBtn" title="Dán link">Dán</button>
+            </div>
+            <button type="submit">Đọc Ngay</button>
+        </form>
+    </div>
+
+    <script>
+        const urlInput = document.getElementById('urlInput');
+        const clearBtn = document.getElementById('clearBtn');
+        const pasteBtn = document.getElementById('pasteBtn');
+
+        clearBtn.addEventListener('click', () => {
+            urlInput.value = '';
+            urlInput.focus();
+        });
+
+        pasteBtn.addEventListener('click', async () => {
+            if (navigator.clipboard && navigator.clipboard.readText) {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    urlInput.value = text;
+                    urlInput.focus();
+                    return;
+                } catch (err) {
+                    console.error('Lỗi khi dán:', err);
+                }
+            }
+            alert('Trình duyệt không hỗ trợ hoặc chưa cấp quyền dán tự động. Bạn vui lòng dán thủ công bằng Ctrl+V nhé!');
+        });
+    </script>
 </body>
 
 </html>

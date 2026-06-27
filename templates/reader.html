@@ -3,55 +3,69 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chế Độ Đọc</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
-            background: #000;
+            background: #111;
+            color: #fff;
             text-align: center;
+            font-family: Arial, sans-serif;
         }
 
         .nav {
-            padding: 15px;
-            background: #111;
+            position: sticky;
+            top: 0;
+            padding: 15px 20px;
+            background: rgba(26, 26, 26, 0.95);
+            backdrop-filter: blur(5px);
             text-align: left;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
         }
 
         .nav a {
             color: #00ffcc;
             text-decoration: none;
-            font-size: 18px;
-            font-family: Arial;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .nav a:hover {
+            text-decoration: underline;
         }
 
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
+            max-width: 1000px;
+            margin: 20px auto;
+            padding: 0 10px;
         }
 
         .image-wrapper {
-            position: relative;
-            width: 100%;
-            min-height: 800px;
-            background: #222;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             display: flex;
-            align-items: center;
             justify-content: center;
+            background: #1a1a1a;
+            min-height: 200px;
+            border-radius: 4px;
+            overflow: hidden;
         }
 
         .image-wrapper img {
-            width: 100%;
-            display: none;
-            /* Ẩn cho đến khi load xong */
-            margin: 0;
+            max-width: 100%;
+            height: auto;
+            display: block;
         }
 
-        .loading-text {
-            color: #888;
-            font-family: Arial;
-            font-size: 16px;
-            display: none;
+        .empty-msg {
+            margin-top: 50px;
+            color: #aaa;
+            font-size: 18px;
         }
     </style>
 </head>
@@ -61,73 +75,16 @@
         <a href="/">← Nhập link khác</a>
     </div>
     <div class="container">
-        {% if page_links %}
-        {% for page_url in page_links %}
-        <div class="image-wrapper" data-page-url="{{ page_url }}">
-            <div class="loading-text">Đang đợi tải...</div>
-            <img src="" alt="comic page">
-        </div>
-        {% endfor %}
+        {% if image_links %}
+            {% for img_url in image_links %}
+            <div class="image-wrapper">
+                <img src="{{ img_url }}" alt="Trang truyện" loading="lazy" referrerpolicy="no-referrer">
+            </div>
+            {% endfor %}
         {% else %}
-        <h3 style="color: white; margin-top: 50px;">Không tìm thấy ảnh. Link có thể bị sai.</h3>
+            <div class="empty-msg">Không tìm thấy ảnh nào từ đường dẫn này. Bạn hãy kiểm tra lại link nhé!</div>
         {% endif %}
     </div>
-
-    <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            const imageWrappers = Array.from(document.querySelectorAll('.image-wrapper'));
-            const maxConcurrent = 10; // Tải 5 ảnh cùng lúc
-            let currentIndex = 0;
-
-            function loadNextImage() {
-                if (currentIndex >= imageWrappers.length) return;
-
-                const wrapper = imageWrappers[currentIndex];
-                currentIndex++; // Tăng chỉ số ngay lập tức để luồng khác không lấy trùng
-
-                const pageUrl = wrapper.getAttribute('data-page-url');
-                const img = wrapper.querySelector('img');
-                const loadingText = wrapper.querySelector('.loading-text');
-
-                loadingText.innerText = 'Đang tải...';
-                loadingText.style.display = 'block';
-
-                // Gọi API lấy link ảnh gốc
-                fetch(`/api/get_image?url=${encodeURIComponent(pageUrl)}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.image_url) {
-                            // Gắn sự kiện khi ảnh tải xong hoặc lỗi
-                            img.onload = function () {
-                                this.style.display = 'block';
-                                this.previousElementSibling.style.display = 'none';
-                                this.parentElement.style.minHeight = 'auto';
-                                loadNextImage(); // Tiếp tục tải ảnh tiếp theo
-                            };
-                            img.onerror = function () {
-                                loadingText.innerText = "Lỗi hiển thị ảnh";
-                                loadNextImage();
-                            };
-
-                            // Bắt đầu tải ảnh
-                            img.src = data.image_url;
-                        } else {
-                            loadingText.innerText = "Lỗi tải ảnh";
-                            loadNextImage();
-                        }
-                    })
-                    .catch(err => {
-                        loadingText.innerText = "Lỗi kết nối";
-                        loadNextImage();
-                    });
-            }
-
-            // Bắt đầu tải các ảnh song song
-            for (let i = 0; i < Math.min(maxConcurrent, imageWrappers.length); i++) {
-                loadNextImage();
-            }
-        });
-    </script>
 </body>
 
 </html>
