@@ -49,17 +49,26 @@
         .image-wrapper {
             margin-bottom: 15px;
             display: flex;
+            flex-direction: column;
+            align-items: center;
             justify-content: center;
             background: #1a1a1a;
-            min-height: 200px;
-            border-radius: 4px;
+            min-height: 400px;
+            border-radius: 6px;
             overflow: hidden;
+            position: relative;
         }
 
         .image-wrapper img {
             max-width: 100%;
             height: auto;
-            display: block;
+            display: none;
+        }
+
+        .loading-text {
+            color: #888;
+            font-size: 16px;
+            padding: 20px;
         }
 
         .empty-msg {
@@ -75,16 +84,108 @@
         <a href="/">← Nhập link khác</a>
     </div>
     <div class="container">
-        {% if image_links %}
-            {% for img_url in image_links %}
-            <div class="image-wrapper">
-                <img src="{{ img_url }}" alt="Trang truyện" loading="lazy" referrerpolicy="no-referrer">
+        {% if pages_data %}
+            {% for item in pages_data %}
+            <div class="image-wrapper" data-index="{{ loop.index0 }}" {% if item.subpage_url %}data-subpage="{{ item.subpage_url }}"{% endif %}>
+                <div class="loading-text">Trang {{ loop.index }} - Đang đợi tải...</div>
+                <img {% if item.img_url %}data-src="{{ item.img_url }}"{% endif %} alt="Trang truyện {{ loop.index }}" referrerpolicy="no-referrer">
             </div>
             {% endfor %}
         {% else %}
             <div class="empty-msg">Không tìm thấy ảnh nào từ đường dẫn này. Bạn hãy kiểm tra lại link nhé!</div>
         {% endif %}
     </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const wrappers = Array.from(document.querySelectorAll('.image-wrapper'));
+            const total = wrappers.length;
+            const LOOK_AHEAD = 20; // Chỉ xử lý và tải trước khoảng 20 ảnh tính từ vị trí đang xem
+
+            function loadRange(startIdx) {
+                const endIdx = Math.min(startIdx + LOOK_AHEAD, total);
+                for (let i = startIdx; i < endIdx; i++) {
+                    const wrapper = wrappers[i];
+                    const img = wrapper.querySelector('img');
+                    const subpageUrl = wrapper.getAttribute('data-subpage');
+                    let dataSrc = img ? img.getAttribute('data-src') : null;
+
+                    // Nếu ảnh chưa có link trực tiếp (từ trang 21 trở đi), gọi API backend lấy link ảnh
+                    if (!dataSrc && subpageUrl && !wrapper.dataset.resolving) {
+                        wrapper.dataset.resolving = "true";
+                        const loadingText = wrapper.querySelector('.loading-text');
+                        if (loadingText) loadingText.innerText = `Trang ${i + 1} - Đang phân tích link ảnh...`;
+
+                        fetch(`/api/resolve_image?url=${encodeURIComponent(subpageUrl)}`)
+                            .then(res => res.json())
+                            .then(data => {
+                                if (data.image_url) {
+                                    img.setAttribute('data-src', data.image_url);
+                                    startLoadingImage(wrapper, img, data.image_url, i);
+                                } else {
+                                    if (loadingText) loadingText.innerText = `Lỗi lấy link ảnh trang ${i + 1}`;
+                                }
+                            })
+                            .catch(() => {
+                                wrapper.dataset.resolving = ""; // Cho phép thử lại nếu lỗi mạng
+                                if (loadingText) loadingText.innerText = `Lỗi kết nối trang ${i + 1}`;
+                            });
+                    } else if (dataSrc && !img.src) {
+                        // Nếu đã sẵn link ảnh thì tải ngay
+                        startLoadingImage(wrapper, img, dataSrc, i);
+                    }
+                }
+            }
+
+            function startLoadingImage(wrapper, img, srcUrl, idx) {
+                if (img.src) return;
+                const loadingText = wrapper.querySelector('.loading-text');
+                if (loadingText) loadingText.innerText = `Trang ${idx + 1} - Đang tải ảnh...`;
+                
+                img.onload = () => {
+                    img.style.display = 'block';
+                    if (loadingText) loadingText.style.display = 'none';
+                    wrapper.style.minHeight = 'auto';
+                };
+                img.onerror = () => {
+                    if (loadingText) loadingText.innerText = `Lỗi hiển thị ảnh trang ${idx + 1}`;
+                };
+                img.src = srcUrl;
+            }
+
+            if (total > 0) {
+                // Kích hoạt ngay 20 ảnh đầu tiên
+                loadRange(0);
+
+                // Theo dõi người dùng cuộn đến đâu để kích hoạt dải 20 ảnh tiếp theo
+                if ('IntersectionObserver' in window) {
+                    const observer = new IntersectionObserver((entries) => {
+                        entries.forEach(entry => {
+                            if (entry.isIntersecting) {
+                                const idx = parseInt(entry.target.getAttribute('data-index'), 10);
+                                if (!isNaN(idx)) {
+                                    loadRange(idx);
+                                }
+                            }
+                        });
+                    }, {
+                        rootMargin: '400px 0px' // Bắt đầu chuẩn bị trước khi cuộn tới 400px
+                    });
+
+                    wrappers.forEach(w => observer.observe(w));
+                } else {
+                    window.addEventListener('scroll', () => {
+                        const scrollPos = window.scrollY + window.innerHeight;
+                        wrappers.forEach((w, idx) => {
+                            if (w.offsetTop < scrollPos + 1000) {
+                                loadRange(idx);
+                            }
+                        });
+                    });
+                }
+            }
+        });
+    </script>
 </body>
 
 </html>
